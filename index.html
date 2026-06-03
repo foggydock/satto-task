@@ -86,15 +86,31 @@
   .suggest-item:active { background: var(--accent); color: #fff; }
   .suggest-item .ico { color: var(--text-dim); font-size: 14px; }
 
-  .row2 { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
-  .date-field { flex: 1; position: relative; }
-  .date-field input {
-    width: 100%; height: var(--tap); padding: 0 14px;
+  .row2 { margin-top: 10px; }
+  .date-field {
+    display: flex; align-items: center; gap: 10px;
+    height: var(--tap); padding: 0 12px 0 16px;
     background: var(--surface); border: 1.5px solid var(--line);
-    border-radius: var(--radius); color: var(--text); font-size: 15px;
+    border-radius: var(--radius); cursor: pointer;
   }
-  .date-field input:focus { outline: none; border-color: var(--accent); }
-  .date-field.empty input { color: var(--text-dim); }
+  .date-field:focus-within { border-color: var(--accent); }
+  .date-cap { color: var(--text-dim); font-size: 15px; white-space: nowrap; }
+  .date-cap .opt { font-size: 13px; opacity: .75; }
+  .date-field input[type=date] {
+    flex: 1; min-width: 0; height: 100%; padding: 0;
+    background: transparent; border: none; color: var(--text);
+    font-size: 16px; text-align: right;
+  }
+  .date-field input[type=date]:focus { outline: none; }
+  /* 空のときは右側の年/月/日プレースホルダを隠してスッキリ見せる */
+  .date-field.noval input[type=date] { color: transparent; }
+  .date-clear {
+    display: none; flex-shrink: 0; width: 30px; height: 30px;
+    border: none; border-radius: 50%; background: var(--surface-2);
+    color: var(--text-dim); font-size: 20px; line-height: 1; cursor: pointer;
+    align-items: center; justify-content: center;
+  }
+  .date-field:not(.noval) .date-clear { display: flex; }
 
   .flags { display: flex; gap: 8px; margin-top: 10px; }
   .flag {
@@ -225,9 +241,11 @@
     </div>
 
     <div class="row2">
-      <div class="date-field empty" id="dateField">
+      <label class="date-field noval" id="dateField" for="dateInput">
+        <span class="date-cap">📅 締め切り日<span class="opt">（任意）</span></span>
         <input type="date" id="dateInput" onchange="onDateChange()">
-      </div>
+        <button type="button" class="date-clear" id="dateClear" onclick="clearDate(event)" aria-label="締め切りを消す">×</button>
+      </label>
     </div>
 
     <div class="flags">
@@ -299,7 +317,12 @@ function toggleFlag(type) {
 }
 function onDateChange() {
   const f = document.getElementById('dateField');
-  f.classList.toggle('empty', !document.getElementById('dateInput').value);
+  f.classList.toggle('noval', !document.getElementById('dateInput').value);
+}
+function clearDate(e) {
+  e.preventDefault();
+  document.getElementById('dateInput').value = '';
+  document.getElementById('dateField').classList.add('noval');
 }
 
 function addTask() {
@@ -318,7 +341,7 @@ function addTask() {
   // フォームをリセット
   input.value = '';
   document.getElementById('dateInput').value = '';
-  document.getElementById('dateField').classList.add('empty');
+  document.getElementById('dateField').classList.add('noval');
   flags = { urgent: false, important: false };
   document.getElementById('flagUrgent').classList.remove('on');
   document.getElementById('flagImportant').classList.remove('on');
@@ -410,13 +433,19 @@ function clearArchive() {
 }
 
 /* ---------- 並び替え ---------- */
+// 緊急 > 重要 > その他。両方持ちは緊急扱いで最上位。
+function priorityRank(t) {
+  return (t.urgent ? 0 : 1) * 2 + (t.important ? 0 : 1);
+}
 function sortedActive() {
   const active = state.tasks.filter(t => !t.archivedAt);
   const withDl = active.filter(t => t.deadline)
     .sort((a,b) => a.deadline.localeCompare(b.deadline) ||
                    new Date(a.createdAt) - new Date(b.createdAt));
+  // 締め切りなしは「緊急→重要→その他」、同じ優先度内は入力が古い順
   const noDl = active.filter(t => !t.deadline)
-    .sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)); // 古い順
+    .sort((a,b) => priorityRank(a) - priorityRank(b) ||
+                   new Date(a.createdAt) - new Date(b.createdAt));
   return { withDl, noDl };
 }
 function sortedArchive() {
@@ -485,7 +514,7 @@ function render() {
       html += withDl.map(t => cardHtml(t, false)).join('');
     }
     if (noDl.length) {
-      html += `<div class="group-label">締め切りなし（入力順）</div>`;
+      html += `<div class="group-label">締め切りなし（緊急→重要→その他）</div>`;
       html += noDl.map(t => cardHtml(t, false)).join('');
     }
     list.innerHTML = html;
