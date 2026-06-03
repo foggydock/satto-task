@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="サッとタスク">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>サッとタスク</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --surface: #1a1d25;
+    --surface-2: #232733;
+    --line: #2e3340;
+    --text: #e8eaf0;
+    --text-dim: #9aa0ad;
+    --accent: #4f8cff;
+    --accent-press: #3d72d6;
+    --urgent: #ff5c5c;
+    --important: #ffb020;
+    --done: #3ecf8e;
+    --radius: 14px;
+    --tap: 52px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 40px;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 14px; }
+
+  /* Header */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(15,17,21,0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 0 10px;
+  }
+  .header-row { display: flex; align-items: center; justify-content: space-between; }
+  h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: .02em; }
+  .tabs { display: flex; gap: 8px; margin-top: 12px; }
+  .tab {
+    flex: 1; height: 40px; border: none; border-radius: 10px;
+    background: var(--surface); color: var(--text-dim);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .tab.active { background: var(--accent); color: #fff; }
+  .count-badge {
+    display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px;
+    font-size: 12px; line-height: 18px; border-radius: 9px;
+    background: rgba(255,255,255,0.18);
+  }
+
+  /* Quick add */
+  .composer { margin: 14px 0; }
+  .title-field { position: relative; }
+  .title-field input {
+    width: 100%; height: var(--tap); padding: 0 16px;
+    background: var(--surface); border: 1.5px solid var(--line);
+    border-radius: var(--radius); color: var(--text); font-size: 17px;
+  }
+  .title-field input:focus { outline: none; border-color: var(--accent); }
+
+  /* Suggestions */
+  .suggest {
+    position: absolute; left: 0; right: 0; top: calc(var(--tap) + 6px); z-index: 30;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden; box-shadow: 0 12px 30px rgba(0,0,0,.45);
+  }
+  .suggest-item {
+    padding: 13px 16px; font-size: 16px; cursor: pointer;
+    border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px;
+  }
+  .suggest-item:last-child { border-bottom: none; }
+  .suggest-item:active { background: var(--accent); color: #fff; }
+  .suggest-item .ico { color: var(--text-dim); font-size: 14px; }
+
+  .row2 { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+  .date-field { flex: 1; position: relative; }
+  .date-field input {
+    width: 100%; height: var(--tap); padding: 0 14px;
+    background: var(--surface); border: 1.5px solid var(--line);
+    border-radius: var(--radius); color: var(--text); font-size: 15px;
+  }
+  .date-field input:focus { outline: none; border-color: var(--accent); }
+  .date-field.empty input { color: var(--text-dim); }
+
+  .flags { display: flex; gap: 8px; margin-top: 10px; }
+  .flag {
+    flex: 1; height: var(--tap); border-radius: var(--radius);
+    border: 1.5px solid var(--line); background: var(--surface);
+    color: var(--text-dim); font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    cursor: pointer; user-select: none;
+  }
+  .flag .box {
+    width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--text-dim);
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+  }
+  .flag.on.urgent { border-color: var(--urgent); color: var(--urgent); background: rgba(255,92,92,.10); }
+  .flag.on.urgent .box { border-color: var(--urgent); background: var(--urgent); color:#fff; }
+  .flag.on.important { border-color: var(--important); color: var(--important); background: rgba(255,176,32,.10); }
+  .flag.on.important .box { border-color: var(--important); background: var(--important); color:#1a1d25; }
+
+  .add-btn {
+    width: 100%; height: var(--tap); margin-top: 10px;
+    background: var(--accent); color: #fff; border: none;
+    border-radius: var(--radius); font-size: 17px; font-weight: 700; cursor: pointer;
+  }
+  .add-btn:active { background: var(--accent-press); }
+  .add-btn:disabled { opacity: .45; }
+
+  /* List */
+  .list { margin-top: 8px; }
+  .group-label {
+    font-size: 12px; font-weight: 700; color: var(--text-dim);
+    letter-spacing: .08em; margin: 18px 4px 8px; text-transform: uppercase;
+  }
+  .card {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 14px; margin-bottom: 10px;
+    position: relative; overflow: hidden;
+  }
+  .card.has-deadline::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: var(--accent);
+  }
+  .card.overdue::before { background: var(--urgent); }
+  .card.soon::before { background: var(--important); }
+
+  .check {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+    border: 2px solid var(--text-dim); background: transparent;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: transparent; font-size: 16px; margin-top: 1px; transition: all .15s;
+  }
+  .check:active { transform: scale(.88); }
+  .card.done-anim .check { border-color: var(--done); background: var(--done); color:#fff; }
+
+  .card-body { flex: 1; min-width: 0; }
+  .card-title { font-size: 16.5px; font-weight: 600; word-break: break-word; }
+  .card.archived .card-title { text-decoration: line-through; color: var(--text-dim); }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; align-items: center; }
+  .pill {
+    font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .pill.urgent { background: rgba(255,92,92,.15); color: var(--urgent); }
+  .pill.important { background: rgba(255,176,32,.15); color: var(--important); }
+  .pill.deadline { background: rgba(79,140,255,.15); color: var(--accent); }
+  .pill.deadline.overdue { background: rgba(255,92,92,.18); color: var(--urgent); }
+  .pill.deadline.soon { background: rgba(255,176,32,.18); color: var(--important); }
+  .created { font-size: 12px; color: var(--text-dim); }
+
+  .del-btn {
+    flex-shrink: 0; background: none; border: none; color: var(--text-dim);
+    font-size: 20px; cursor: pointer; padding: 4px 6px; align-self: center;
+  }
+  .restore-btn {
+    flex-shrink: 0; background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+    padding: 8px 12px; border-radius: 10px; align-self: center;
+  }
+
+  .empty {
+    text-align: center; color: var(--text-dim); padding: 60px 20px; font-size: 15px;
+  }
+  .empty .big { font-size: 40px; margin-bottom: 12px; }
+
+  .archive-tools { display: flex; justify-content: flex-end; margin: 6px 4px; }
+  .clear-btn {
+    background: none; border: 1px solid var(--line); color: var(--text-dim);
+    font-size: 13px; padding: 7px 12px; border-radius: 9px; cursor: pointer;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(120%);
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--line);
+    padding: 12px 16px; border-radius: 12px; font-size: 14px; z-index: 50;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5); transition: transform .25s; max-width: 90%;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast button {
+    background: var(--accent); border: none; color: #fff; font-weight: 700;
+    padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="header-row">
+      <h1>⚡ サッとタスク</h1>
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tabActive" onclick="switchTab('active')">
+        やること<span class="count-badge" id="cntActive">0</span>
+      </button>
+      <button class="tab" id="tabArchive" onclick="switchTab('archive')">
+        完了済み<span class="count-badge" id="cntArchive">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Composer -->
+  <div class="composer" id="composer">
+    <div class="title-field">
+      <input type="text" id="titleInput" placeholder="やることを入力…" autocomplete="off"
+             oninput="onTitleInput()" onkeydown="if(event.key==='Enter')addTask()">
+      <div class="suggest" id="suggestBox" style="display:none"></div>
+    </div>
+
+    <div class="row2">
+      <div class="date-field empty" id="dateField">
+        <input type="date" id="dateInput" onchange="onDateChange()">
+      </div>
+    </div>
+
+    <div class="flags">
+      <div class="flag urgent" id="flagUrgent" onclick="toggleFlag('urgent')">
+        <span class="box">✓</span>緊急
+      </div>
+      <div class="flag important" id="flagImportant" onclick="toggleFlag('important')">
+        <span class="box">✓</span>重要
+      </div>
+    </div>
+
+    <button class="add-btn" id="addBtn" onclick="addTask()" disabled>追加する</button>
+  </div>
+
+  <!-- List -->
+  <div class="list" id="list"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- データ層 ---------- */
+const KEY = 'sat_task_v1';
+let state = { tasks: [] };   // {id,title,deadline(YYYY-MM-DD|null),urgent,important,createdAt,archivedAt|null}
+let currentTab = 'active';
+let flags = { urgent: false, important: false };
+
+function load() {
+  try { state = JSON.parse(localStorage.getItem(KEY)) || { tasks: [] }; }
+  catch { state = { tasks: [] }; }
+  if (!Array.isArray(state.tasks)) state.tasks = [];
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+
+/* ---------- 日付ユーティリティ ---------- */
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function daysUntil(dateStr) {
+  const t = new Date(todayStr()+'T00:00:00');
+  const d = new Date(dateStr+'T00:00:00');
+  return Math.round((d - t) / 86400000);
+}
+function fmtCreated(iso) {
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()} 入力`;
+}
+function fmtDeadline(dateStr) {
+  const n = daysUntil(dateStr);
+  const d = new Date(dateStr+'T00:00:00');
+  const md = `${d.getMonth()+1}/${d.getDate()}`;
+  if (n < 0)  return `${md}（${-n}日超過）`;
+  if (n === 0) return `${md}（今日）`;
+  if (n === 1) return `${md}（明日）`;
+  return `${md}（あと${n}日）`;
+}
+
+/* ---------- 入力フォーム ---------- */
+function onTitleInput() {
+  const v = document.getElementById('titleInput').value;
+  document.getElementById('addBtn').disabled = v.trim() === '';
+  renderSuggest(v);
+}
+function toggleFlag(type) {
+  flags[type] = !flags[type];
+  document.getElementById(type === 'urgent' ? 'flagUrgent' : 'flagImportant')
+    .classList.toggle('on', flags[type]);
+}
+function onDateChange() {
+  const f = document.getElementById('dateField');
+  f.classList.toggle('empty', !document.getElementById('dateInput').value);
+}
+
+function addTask() {
+  const input = document.getElementById('titleInput');
+  const title = input.value.trim();
+  if (!title) return;
+  const deadline = document.getElementById('dateInput').value || null;
+  state.tasks.push({
+    id: Date.now() + '' + Math.floor(Math.random()*1000),
+    title, deadline,
+    urgent: flags.urgent, important: flags.important,
+    createdAt: new Date().toISOString(),
+    archivedAt: null
+  });
+  save();
+  // フォームをリセット
+  input.value = '';
+  document.getElementById('dateInput').value = '';
+  document.getElementById('dateField').classList.add('empty');
+  flags = { urgent: false, important: false };
+  document.getElementById('flagUrgent').classList.remove('on');
+  document.getElementById('flagImportant').classList.remove('on');
+  document.getElementById('addBtn').disabled = true;
+  hideSuggest();
+  render();
+  input.focus();
+}
+
+/* ---------- サジェスト（履歴からリアルタイム補完） ---------- */
+function historyTitles() {
+  // 過去に使ったタイトルを、よく使う順＆新しい順で重複なく
+  const map = new Map(); // title -> {count, last}
+  for (const t of state.tasks) {
+    const key = t.title;
+    const e = map.get(key) || { count: 0, last: 0 };
+    e.count++;
+    const ts = new Date(t.createdAt).getTime();
+    if (ts > e.last) e.last = ts;
+    map.set(key, e);
+  }
+  return [...map.entries()]
+    .sort((a,b) => b[1].count - a[1].count || b[1].last - a[1].last)
+    .map(e => e[0]);
+}
+function renderSuggest(q) {
+  const box = document.getElementById('suggestBox');
+  const query = q.trim().toLowerCase();
+  if (!query) { hideSuggest(); return; }
+  const matches = historyTitles()
+    .filter(t => t.toLowerCase().includes(query) && t.toLowerCase() !== query)
+    .slice(0, 5);
+  if (matches.length === 0) { hideSuggest(); return; }
+  box.innerHTML = matches.map(t =>
+    `<div class="suggest-item" onmousedown="pickSuggest(event)" data-t="${escAttr(t)}">
+       <span class="ico">↩</span>${escHtml(t)}
+     </div>`).join('');
+  box.style.display = 'block';
+}
+function pickSuggest(e) {
+  e.preventDefault();
+  const t = e.currentTarget.getAttribute('data-t');
+  const input = document.getElementById('titleInput');
+  input.value = t;
+  document.getElementById('addBtn').disabled = false;
+  hideSuggest();
+  input.focus();
+}
+function hideSuggest() { document.getElementById('suggestBox').style.display = 'none'; }
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.title-field')) hideSuggest();
+});
+
+/* ---------- 完了 / 復元 / 削除 ---------- */
+let lastArchived = null;
+function completeTask(id) {
+  const t = state.tasks.find(x => x.id === id);
+  if (!t) return;
+  // チェックアニメ → 少し待ってアーカイブ
+  const card = document.querySelector(`[data-card="${id}"]`);
+  if (card) card.classList.add('done-anim');
+  setTimeout(() => {
+    t.archivedAt = new Date().toISOString();
+    lastArchived = id;
+    save();
+    render();
+    showToast('完了にしました', '元に戻す', () => restoreTask(id));
+  }, 220);
+}
+function restoreTask(id) {
+  const t = state.tasks.find(x => x.id === id);
+  if (!t) return;
+  t.archivedAt = null;
+  save();
+  render();
+  hideToast();
+}
+function deleteTask(id) {
+  if (!confirm('このタスクを完全に削除しますか？')) return;
+  state.tasks = state.tasks.filter(x => x.id !== id);
+  save();
+  render();
+}
+function clearArchive() {
+  if (!confirm('完了済みをすべて削除しますか？（履歴のサジェストも消えます）')) return;
+  state.tasks = state.tasks.filter(x => !x.archivedAt);
+  save();
+  render();
+}
+
+/* ---------- 並び替え ---------- */
+function sortedActive() {
+  const active = state.tasks.filter(t => !t.archivedAt);
+  const withDl = active.filter(t => t.deadline)
+    .sort((a,b) => a.deadline.localeCompare(b.deadline) ||
+                   new Date(a.createdAt) - new Date(b.createdAt));
+  const noDl = active.filter(t => !t.deadline)
+    .sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)); // 古い順
+  return { withDl, noDl };
+}
+function sortedArchive() {
+  return state.tasks.filter(t => t.archivedAt)
+    .sort((a,b) => new Date(b.archivedAt) - new Date(a.archivedAt)); // 新しく完了した順
+}
+
+/* ---------- 描画 ---------- */
+function deadlineClass(dateStr) {
+  const n = daysUntil(dateStr);
+  if (n < 0) return 'overdue';
+  if (n <= 2) return 'soon';
+  return '';
+}
+function cardHtml(t, archived) {
+  const dlCls = t.deadline ? deadlineClass(t.deadline) : '';
+  const cls = ['card'];
+  if (archived) cls.push('archived');
+  else if (t.deadline) { cls.push('has-deadline'); if (dlCls) cls.push(dlCls); }
+
+  const pills = [];
+  if (t.deadline) pills.push(`<span class="pill deadline ${dlCls}">📅 ${fmtDeadline(t.deadline)}</span>`);
+  if (t.urgent)    pills.push(`<span class="pill urgent">🔥 緊急</span>`);
+  if (t.important) pills.push(`<span class="pill important">⭐ 重要</span>`);
+
+  const left = archived
+    ? ''
+    : `<button class="check" onclick="completeTask('${t.id}')" aria-label="完了">✓</button>`;
+  const right = archived
+    ? `<button class="restore-btn" onclick="restoreTask('${t.id}')">戻す</button>
+       <button class="del-btn" onclick="deleteTask('${t.id}')" aria-label="削除">🗑</button>`
+    : `<button class="del-btn" onclick="deleteTask('${t.id}')" aria-label="削除">🗑</button>`;
+
+  return `<div class="${cls.join(' ')}" data-card="${t.id}">
+    ${left}
+    <div class="card-body">
+      <div class="card-title">${escHtml(t.title)}</div>
+      <div class="meta">
+        ${pills.join('')}
+        <span class="created">${fmtCreated(t.createdAt)}</span>
+      </div>
+    </div>
+    ${right}
+  </div>`;
+}
+
+function render() {
+  const active = state.tasks.filter(t => !t.archivedAt);
+  const archive = state.tasks.filter(t => t.archivedAt);
+  document.getElementById('cntActive').textContent = active.length;
+  document.getElementById('cntArchive').textContent = archive.length;
+
+  const list = document.getElementById('list');
+  const composer = document.getElementById('composer');
+
+  if (currentTab === 'active') {
+    composer.style.display = '';
+    const { withDl, noDl } = sortedActive();
+    if (withDl.length + noDl.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="big">🎉</div>やることはありません</div>`;
+      return;
+    }
+    let html = '';
+    if (withDl.length) {
+      html += `<div class="group-label">締め切りあり（近い順）</div>`;
+      html += withDl.map(t => cardHtml(t, false)).join('');
+    }
+    if (noDl.length) {
+      html += `<div class="group-label">締め切りなし（入力順）</div>`;
+      html += noDl.map(t => cardHtml(t, false)).join('');
+    }
+    list.innerHTML = html;
+  } else {
+    composer.style.display = 'none';
+    const arch = sortedArchive();
+    if (arch.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="big">📭</div>完了済みはありません</div>`;
+      return;
+    }
+    list.innerHTML =
+      `<div class="archive-tools"><button class="clear-btn" onclick="clearArchive()">すべて削除</button></div>` +
+      arch.map(t => cardHtml(t, true)).join('');
+  }
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tabActive').classList.toggle('active', tab === 'active');
+  document.getElementById('tabArchive').classList.toggle('active', tab === 'archive');
+  hideSuggest();
+  render();
+}
+
+/* ---------- Toast ---------- */
+let toastTimer = null;
+function showToast(msg, actionLabel, onAction) {
+  const el = document.getElementById('toast');
+  el.innerHTML = `<span>${escHtml(msg)}</span>`;
+  if (actionLabel) {
+    const b = document.createElement('button');
+    b.textContent = actionLabel;
+    b.onclick = () => { onAction && onAction(); };
+    el.appendChild(b);
+  }
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 4000);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); }
+
+/* ---------- エスケープ ---------- */
+function escHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function escAttr(s){return s.replace(/"/g,'&quot;');}
+
+/* ---------- 起動 ---------- */
+load();
+render();
+</script>
+</body>
+</html>
