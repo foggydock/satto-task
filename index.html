@@ -214,6 +214,43 @@
     background: var(--accent); border: none; color: #fff; font-weight: 700;
     padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
   }
+
+  /* タップで編集できることを示すヒント */
+  .card-body.editable { cursor: pointer; }
+
+  /* 編集シート（下からスライドするモーダル） */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.55);
+    display: none; align-items: flex-end; justify-content: center;
+  }
+  .modal-backdrop.show { display: flex; }
+  .sheet {
+    width: 100%; max-width: 560px; background: var(--surface);
+    border-top-left-radius: 20px; border-top-right-radius: 20px;
+    border: 1px solid var(--line); border-bottom: none;
+    padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
+    animation: sheetUp .2s ease;
+  }
+  @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .sheet h2 { font-size: 17px; margin: 4px 2px 14px; font-weight: 700; }
+  .sheet .title-field input { font-size: 17px; }
+  .sheet .row2, .sheet .flags { margin-top: 10px; }
+  .sheet-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .btn-cancel {
+    flex: 1; height: var(--tap); border-radius: var(--radius);
+    border: 1.5px solid var(--line); background: var(--surface-2);
+    color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .btn-save {
+    flex: 2; height: var(--tap); border-radius: var(--radius); border: none;
+    background: var(--accent); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+  }
+  .btn-save:active { background: var(--accent-press); }
+  .btn-save:disabled { opacity: .45; }
+  .btn-delete-row {
+    width: 100%; margin-top: 14px; background: none; border: none;
+    color: var(--urgent); font-size: 14px; padding: 8px; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -265,6 +302,36 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- 編集シート -->
+<div class="modal-backdrop" id="editBackdrop" onclick="closeEditIfBackdrop(event)">
+  <div class="sheet">
+    <h2>タスクを編集</h2>
+    <div class="title-field">
+      <input type="text" id="editTitle" placeholder="やること" autocomplete="off" oninput="onEditTitleInput()">
+    </div>
+    <div class="row2">
+      <label class="date-field noval" id="editDateField" for="editDate">
+        <span class="date-cap">📅 締め切り日<span class="opt">（任意）</span></span>
+        <input type="date" id="editDate" onchange="editDateChange()">
+        <button type="button" class="date-clear" id="editDateClear" onclick="clearEditDate(event)" aria-label="締め切りを消す">×</button>
+      </label>
+    </div>
+    <div class="flags">
+      <div class="flag urgent" id="editFlagUrgent" onclick="toggleEditFlag('urgent')">
+        <span class="box">✓</span>緊急
+      </div>
+      <div class="flag important" id="editFlagImportant" onclick="toggleEditFlag('important')">
+        <span class="box">✓</span>重要
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" onclick="closeEdit()">キャンセル</button>
+      <button class="btn-save" id="editSaveBtn" onclick="saveEdit()">保存する</button>
+    </div>
+    <button class="btn-delete-row" onclick="deleteFromEdit()">🗑 このタスクを削除</button>
+  </div>
+</div>
 
 <script>
 /* ---------- データ層 ---------- */
@@ -323,6 +390,71 @@ function clearDate(e) {
   e.preventDefault();
   document.getElementById('dateInput').value = '';
   document.getElementById('dateField').classList.add('noval');
+}
+
+/* ---------- 編集シート ---------- */
+let editingId = null;
+let editFlags = { urgent: false, important: false };
+
+function openEdit(id) {
+  const t = state.tasks.find(x => x.id === id);
+  if (!t) return;
+  editingId = id;
+  document.getElementById('editTitle').value = t.title;
+  document.getElementById('editSaveBtn').disabled = false;
+  const di = document.getElementById('editDate');
+  di.value = t.deadline || '';
+  document.getElementById('editDateField').classList.toggle('noval', !t.deadline);
+  editFlags = { urgent: !!t.urgent, important: !!t.important };
+  document.getElementById('editFlagUrgent').classList.toggle('on', editFlags.urgent);
+  document.getElementById('editFlagImportant').classList.toggle('on', editFlags.important);
+  hideSuggest();
+  document.getElementById('editBackdrop').classList.add('show');
+}
+function onEditTitleInput() {
+  document.getElementById('editSaveBtn').disabled =
+    document.getElementById('editTitle').value.trim() === '';
+}
+function toggleEditFlag(type) {
+  editFlags[type] = !editFlags[type];
+  document.getElementById(type === 'urgent' ? 'editFlagUrgent' : 'editFlagImportant')
+    .classList.toggle('on', editFlags[type]);
+}
+function editDateChange() {
+  document.getElementById('editDateField')
+    .classList.toggle('noval', !document.getElementById('editDate').value);
+}
+function clearEditDate(e) {
+  e.preventDefault();
+  document.getElementById('editDate').value = '';
+  document.getElementById('editDateField').classList.add('noval');
+}
+function saveEdit() {
+  const t = state.tasks.find(x => x.id === editingId);
+  if (!t) { closeEdit(); return; }
+  const title = document.getElementById('editTitle').value.trim();
+  if (!title) return;
+  t.title = title;
+  t.deadline = document.getElementById('editDate').value || null;
+  t.urgent = editFlags.urgent;
+  t.important = editFlags.important;
+  save();
+  closeEdit();
+  render();
+}
+function deleteFromEdit() {
+  if (!confirm('このタスクを完全に削除しますか？')) return;
+  state.tasks = state.tasks.filter(x => x.id !== editingId);
+  save();
+  closeEdit();
+  render();
+}
+function closeEdit() {
+  document.getElementById('editBackdrop').classList.remove('show');
+  editingId = null;
+}
+function closeEditIfBackdrop(e) {
+  if (e.target.id === 'editBackdrop') closeEdit();
 }
 
 function addTask() {
@@ -479,9 +611,13 @@ function cardHtml(t, archived) {
        <button class="del-btn" onclick="deleteTask('${t.id}')" aria-label="削除">🗑</button>`
     : `<button class="del-btn" onclick="deleteTask('${t.id}')" aria-label="削除">🗑</button>`;
 
+  const bodyOpen = archived
+    ? `<div class="card-body">`
+    : `<div class="card-body editable" onclick="openEdit('${t.id}')">`;
+
   return `<div class="${cls.join(' ')}" data-card="${t.id}">
     ${left}
-    <div class="card-body">
+    ${bodyOpen}
       <div class="card-title">${escHtml(t.title)}</div>
       <div class="meta">
         ${pills.join('')}
