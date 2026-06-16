@@ -112,6 +112,15 @@
   }
   .date-field:not(.noval) .date-clear { display: flex; }
 
+  /* クイック日付チップ */
+  .chips { display: flex; gap: 8px; margin-top: 10px; }
+  .chip {
+    flex: 1; height: 42px; border-radius: 10px;
+    border: 1.5px solid var(--line); background: var(--surface);
+    color: var(--text-dim); font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .chip.on { border-color: var(--accent); color: var(--accent); background: rgba(79,140,255,.12); }
+
   .flags { display: flex; gap: 8px; margin-top: 10px; }
   .flag {
     flex: 1; height: var(--tap); border-radius: var(--radius);
@@ -294,6 +303,11 @@
       <div class="suggest" id="suggestBox" style="display:none"></div>
     </div>
 
+    <div class="chips" id="dateChips">
+      <button type="button" class="chip" data-chip="today" onclick="setQuickDate('today')">今日</button>
+      <button type="button" class="chip" data-chip="tomorrow" onclick="setQuickDate('tomorrow')">明日</button>
+      <button type="button" class="chip" data-chip="weekend" onclick="setQuickDate('weekend')">今週末</button>
+    </div>
     <div class="row2">
       <label class="date-field noval" id="dateField" for="dateInput">
         <span class="date-cap">📅 締め切り日<span class="opt">（任意）</span></span>
@@ -326,6 +340,11 @@
     <h2>タスクを編集</h2>
     <div class="title-field">
       <input type="text" id="editTitle" placeholder="やること" autocomplete="off" oninput="onEditTitleInput()">
+    </div>
+    <div class="chips" id="editDateChips">
+      <button type="button" class="chip" data-chip="today" onclick="setEditQuickDate('today')">今日</button>
+      <button type="button" class="chip" data-chip="tomorrow" onclick="setEditQuickDate('tomorrow')">明日</button>
+      <button type="button" class="chip" data-chip="weekend" onclick="setEditQuickDate('weekend')">今週末</button>
     </div>
     <div class="row2">
       <label class="date-field noval" id="editDateField" for="editDate">
@@ -417,12 +436,40 @@ function toggleFlag(type) {
 function onDateChange() {
   const f = document.getElementById('dateField');
   f.classList.toggle('noval', !document.getElementById('dateInput').value);
+  syncChips('dateInput', 'dateChips');
 }
 function clearDate(e) {
   e.preventDefault();
   document.getElementById('dateInput').value = '';
   document.getElementById('dateField').classList.add('noval');
+  syncChips('dateInput', 'dateChips');
 }
+
+/* ---------- クイック日付チップ ---------- */
+function quickDateValue(kind) {
+  const d = new Date(todayStr() + 'T00:00:00');
+  if (kind === 'tomorrow') d.setDate(d.getDate() + 1);
+  else if (kind === 'weekend') {
+    const dow = d.getDay(); // 0=日, 6=土
+    if (dow !== 6 && dow !== 0) d.setDate(d.getDate() + (6 - dow)); // 今度の土曜
+  }
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function syncChips(inputId, chipsId) {
+  const val = document.getElementById(inputId).value;
+  document.getElementById(chipsId).querySelectorAll('.chip').forEach(c => {
+    c.classList.toggle('on', !!val && val === quickDateValue(c.getAttribute('data-chip')));
+  });
+}
+function applyQuickDate(kind, inputId, fieldId, chipsId) {
+  const input = document.getElementById(inputId);
+  const val = quickDateValue(kind);
+  input.value = (input.value === val) ? '' : val; // 同じチップ再タップで解除
+  document.getElementById(fieldId).classList.toggle('noval', !input.value);
+  syncChips(inputId, chipsId);
+}
+function setQuickDate(kind)     { applyQuickDate(kind, 'dateInput', 'dateField', 'dateChips'); }
+function setEditQuickDate(kind) { applyQuickDate(kind, 'editDate', 'editDateField', 'editDateChips'); }
 
 /* ---------- 編集シート ---------- */
 let editingId = null;
@@ -437,6 +484,7 @@ function openEdit(id) {
   const di = document.getElementById('editDate');
   di.value = t.deadline || '';
   document.getElementById('editDateField').classList.toggle('noval', !t.deadline);
+  syncChips('editDate', 'editDateChips');
   editFlags = { urgent: !!t.urgent, important: !!t.important };
   document.getElementById('editFlagUrgent').classList.toggle('on', editFlags.urgent);
   document.getElementById('editFlagImportant').classList.toggle('on', editFlags.important);
@@ -455,11 +503,13 @@ function toggleEditFlag(type) {
 function editDateChange() {
   document.getElementById('editDateField')
     .classList.toggle('noval', !document.getElementById('editDate').value);
+  syncChips('editDate', 'editDateChips');
 }
 function clearEditDate(e) {
   e.preventDefault();
   document.getElementById('editDate').value = '';
   document.getElementById('editDateField').classList.add('noval');
+  syncChips('editDate', 'editDateChips');
 }
 function saveEdit() {
   const t = state.tasks.find(x => x.id === editingId);
@@ -557,6 +607,7 @@ function addTask() {
   input.value = '';
   document.getElementById('dateInput').value = '';
   document.getElementById('dateField').classList.add('noval');
+  syncChips('dateInput', 'dateChips');
   flags = { urgent: false, important: false };
   document.getElementById('flagUrgent').classList.remove('on');
   document.getElementById('flagImportant').classList.remove('on');
