@@ -251,6 +251,22 @@
     width: 100%; margin-top: 14px; background: none; border: none;
     color: var(--urgent); font-size: 14px; padding: 8px; cursor: pointer;
   }
+
+  /* メニュー（バックアップ・復元） */
+  .menu-btn {
+    background: none; border: none; font-size: 22px; line-height: 1;
+    padding: 4px 6px; cursor: pointer;
+  }
+  .sheet-note { color: var(--text-dim); font-size: 13px; line-height: 1.7; margin: 0 2px 16px; }
+  .btn-restore {
+    width: 100%; height: var(--tap); margin-top: 10px; border-radius: var(--radius);
+    border: 1.5px solid var(--line); background: var(--surface-2);
+    color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .btn-close {
+    width: 100%; margin-top: 12px; background: none; border: none;
+    color: var(--text-dim); font-size: 14px; padding: 8px; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -258,6 +274,7 @@
   <header>
     <div class="header-row">
       <h1>⚡ サッとタスク</h1>
+      <button class="menu-btn" onclick="openMenu()" aria-label="バックアップ・復元">⚙️</button>
     </div>
     <div class="tabs">
       <button class="tab active" id="tabActive" onclick="switchTab('active')">
@@ -330,6 +347,21 @@
       <button class="btn-save" id="editSaveBtn" onclick="saveEdit()">保存する</button>
     </div>
     <button class="btn-delete-row" onclick="deleteFromEdit()">🗑 このタスクを削除</button>
+  </div>
+</div>
+
+<!-- バックアップ・復元シート -->
+<div class="modal-backdrop" id="menuBackdrop" onclick="closeMenuIfBackdrop(event)">
+  <div class="sheet">
+    <h2>バックアップ / 復元</h2>
+    <p class="sheet-note">
+      タスクはこの端末の中だけに保存されています。ときどき書き出して保存しておくと、<br>
+      アプリの入れ直しや機種変更でも元に戻せます。
+    </p>
+    <button class="add-btn" onclick="exportData()">↑ バックアップを書き出す</button>
+    <button class="btn-restore" onclick="triggerImport()">↓ ファイルから復元する</button>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(event)">
+    <button class="btn-close" onclick="closeMenu()">閉じる</button>
   </div>
 </div>
 
@@ -455,6 +487,57 @@ function closeEdit() {
 }
 function closeEditIfBackdrop(e) {
   if (e.target.id === 'editBackdrop') closeEdit();
+}
+
+/* ---------- バックアップ / 復元 ---------- */
+function openMenu() { document.getElementById('menuBackdrop').classList.add('show'); }
+function closeMenu() { document.getElementById('menuBackdrop').classList.remove('show'); }
+function closeMenuIfBackdrop(e) { if (e.target.id === 'menuBackdrop') closeMenu(); }
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `satto-task-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast(`バックアップを書き出しました（${state.tasks.length}件）`);
+}
+
+function triggerImport() { document.getElementById('importFile').click(); }
+function importData(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const obj = JSON.parse(reader.result);
+      const tasks = Array.isArray(obj) ? obj : (obj && Array.isArray(obj.tasks) ? obj.tasks : null);
+      if (!tasks) throw new Error('format');
+      // 同じ id は重複させず、足りないものだけ追加（既存のタスクは消えない）
+      const existing = new Set(state.tasks.map(t => t.id));
+      let added = 0;
+      for (const t of tasks) {
+        if (t && t.id && typeof t.title === 'string' && !existing.has(t.id)) {
+          state.tasks.push(t); existing.add(t.id); added++;
+        }
+      }
+      save();
+      render();
+      closeMenu();
+      showToast(added > 0 ? `復元しました（${added}件を追加）` : '追加するものはありませんでした');
+    } catch (err) {
+      alert('読み込めませんでした。書き出したバックアップファイル（.json）を選んでください。');
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(file);
 }
 
 function addTask() {
